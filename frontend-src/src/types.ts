@@ -45,6 +45,8 @@ export interface FormulaPart {
   activity_offset?: number;
   manual_nudge?: number;
   track_boost?: number;
+  track_boost_effective?: number;
+  effective_max?: number;
   cap_override?: number | null;
   result?: number;
   plays?: boolean;
@@ -146,8 +148,10 @@ export interface MatrixData {
   base: Record<string, Record<string, number>>;
   scenario_off: Record<string, Record<string, number>>;
   activity_off: Record<string, Record<string, number>>;
+  phase_max?: Record<string, Record<string, number>>;
+  boost_allowed?: Record<string, Record<string, boolean>>;
   scalars: Record<string, number>;
-  override: Record<string, Record<string, Record<string, number>>>;
+  override: Record<string, Record<string, Record<string, number | boolean>>>;
 }
 
 export type PageId = "overview" | "music" | "gaming" | "tv" | "rules" | "diagnostics";

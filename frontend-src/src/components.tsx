@@ -88,7 +88,11 @@ export function VolumeBreakdown({ name, data, accent = "cyan" }: { name: string;
   });
   return <Card className={`volume-breakdown ${accent}`} title={name}>
     <div className="formula-compact">{expression}<strong>= {pct(data.result)}</strong></div>
-    <div className="formula-grid">{formulaItems.map(([key, label]) => { const value = typeof data[key] === "number" ? data[key] as number : undefined; return <div key={key}><span>{label}</span><b>{key === "base" ? pct(value) : points(value)}</b></div>; })}</div>
+    <div className="formula-grid">
+      {formulaItems.map(([key, label]) => { const value = typeof data[key] === "number" ? data[key] as number : undefined; return <div key={key}><span>{label}</span><b>{key === "base" ? pct(value) : points(value)}</b></div>; })}
+      {data.effective_max != null && <div><span>Wirksame Obergrenze</span><b>{new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 1 }).format(data.effective_max)}</b></div>}
+      {data.track_boost_effective != null && data.track_boost !== data.track_boost_effective && <div><span>Wirksamer Boost</span><b>{points(data.track_boost_effective)}</b></div>}
+    </div>
     <div className="volume-meter"><i style={{ width: `${Math.max(0, Math.min(100, Number(data.result || 0) * 100))}%` }} /></div>
   </Card>;
 }
