@@ -5,16 +5,20 @@ import type { ApplyData, HassLike, MatrixData, StateData } from "../types";
 import { titleCase } from "../format";
 
 const DAY_LABELS: Record<string, string> = {
-  early_morning: "Früher Morgen", late_morning: "Später Morgen", forenoon: "Vormittag", afternoon: "Nachmittag",
-  early_evening: "Früher Abend", late_evening: "Später Abend", early_night: "Frühe Nacht", late_night: "Späte Nacht",
+  early_morning: "Früher Morgen", forenoon: "Vormittag", midday: "Mittag",
+  afternoon: "Nachmittag", late_afternoon: "Später Nachmittag", evening: "Abend",
+  late_evening: "Später Abend", early_night: "Frühe Nacht", late_night: "Späte Nacht",
+  late_morning: "Später Morgen", early_evening: "Früher Abend",
 };
 const ACTIVITY_LABELS: Record<string, string> = { idle: "Inaktiv", free_time: "Freizeit", work_home: "Arbeit zuhause", work_away: "Arbeit außer Haus", household: "Haushalt" };
 const ACTIVITIES = ["idle", "free_time", "work_home", "work_away", "household"];
 const DEVICES = ["homepods", "denon"] as const;
 type Device = typeof DEVICES[number];
-type Dimension = "base" | "scenario_off" | "activity_off";
+type VolumeDimension = "base" | "scenario_off" | "activity_off" | "phase_max";
+type Dimension = VolumeDimension | "boost_allowed";
+type MatrixCell = number | boolean | null;
 type Tab = "matrix" | "gaming" | "safety" | "delays";
-type MatrixPatch = Partial<Record<Dimension, Partial<Record<Device, Record<string, number | null>>>>>;
+type MatrixPatch = Partial<Record<Dimension, Partial<Record<Device, Record<string, MatrixCell>>>>>;
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 const PRIVATE_DIAGNOSTICS: Record<string, string> = {
@@ -30,21 +34,23 @@ function Help({ text }: { text: string }) {
   return <span className="rule-help" title={text} aria-label={text}><Icon.Info size={15} /></span>;
 }
 
-function PercentInput({ value, offset = false, overridden, disabled, resetToken = 0, onDraft }: { value?: number; offset?: boolean; overridden?: boolean; disabled?: boolean; resetToken?: number; onDraft?: (value: number | undefined) => void }) {
-  const [draft, setDraft] = useState(value == null ? "" : String(Math.round(value * 100)));
+function PercentInput({ value, offset = false, overridden, disabled, resetToken = 0, onDraft, onClear, label }: { value?: number; offset?: boolean; overridden?: boolean; disabled?: boolean; resetToken?: number; onDraft?: (value: number | undefined) => void; onClear?: () => void; label?: string }) {
+  const displayed = value == null ? "" : String(onClear ? Math.round(value * 1000) / 10 : Math.round(value * 100));
+  const [draft, setDraft] = useState(displayed);
   useEffect(() => {
-    const sync = window.setTimeout(() => setDraft(value == null ? "" : String(Math.round(value * 100))), 0);
+    const sync = window.setTimeout(() => setDraft(displayed), 0);
     return () => window.clearTimeout(sync);
-  }, [value, resetToken]);
+  }, [displayed, resetToken]);
   const change = (raw: string) => {
     setDraft(raw);
     if (disabled || !onDraft) return;
+    if (raw === "" && onClear) { onClear(); return; }
     const parsed = Number(raw);
     const valid = raw.trim() !== "" && Number.isFinite(parsed) && parsed >= (offset ? -100 : 0) && parsed <= 100;
-    onDraft(valid ? parsed / 100 : undefined);
+    onDraft(valid ? (onClear ? Math.round(parsed * 10) / 1000 : parsed / 100) : undefined);
   };
   return <label className={`percent-input ${overridden ? "overridden" : ""} ${disabled ? "readonly" : ""}`} title={offset ? "Offset in Prozentpunkten" : "Lautstärke in Prozent"}>
-    <input aria-label={offset ? "Prozentpunkte" : "Prozent"} type="number" value={draft} min={offset ? -100 : 0} max={100} disabled={disabled} onChange={(event) => change(event.target.value)} />
+    <input aria-label={label ?? (offset ? "Prozentpunkte" : "Prozent")} type="number" value={draft} min={offset ? -100 : 0} max={100} step={onClear ? 0.1 : undefined} placeholder={onClear ? "Global" : undefined} disabled={disabled} onChange={(event) => change(event.target.value)} />
     <span>{offset ? "Pkt." : "%"}</span>
   </label>;
 }
@@ -62,11 +68,11 @@ function ResetButton({ label, supported = true, onReset }: { label: string; supp
   </button>;
 }
 
-function SectionHeader({ index, title, sub, unit, help, resetSupported = true, onReset }: { index: number; title: string; sub: string; unit?: string; help: string; resetSupported?: boolean; onReset?: () => void }) {
-  return <div className="rule-title"><span>{index}</span><div><h2>{title} <Help text={help} /></h2><p>{sub}</p></div><div className="rule-title-actions">{unit && <Pill tone="violet">{unit}</Pill>}<ResetButton label={title} supported={resetSupported} onReset={onReset} /></div><div className="rule-device-head"><b>HomePods</b><b>Denon</b></div></div>;
+function SectionHeader({ index, title, sub, unit, help, resetSupported = true, onReset, showDevices = true }: { index: number; title: string; sub: string; unit?: string; help: string; resetSupported?: boolean; onReset?: () => void; showDevices?: boolean }) {
+  return <div className="rule-title"><span>{index}</span><div><h2>{title} <Help text={help} /></h2><p>{sub}</p></div><div className="rule-title-actions">{unit && <Pill tone="violet">{unit}</Pill>}<ResetButton label={title} supported={resetSupported} onReset={onReset} /></div>{showDevices && <div className="rule-device-head"><b>HomePods</b><b>Denon</b></div>}</div>;
 }
 
-function MatrixRows({ matrix, dimension, rows, labels, offset, resetToken, onDraft }: { matrix: MatrixData; dimension: Dimension; rows: string[]; labels: Record<string, string>; offset?: boolean; resetToken: number; onDraft: (device: Device, key: string, value: number | undefined) => void }) {
+function MatrixRows({ matrix, dimension, rows, labels, offset, resetToken, onDraft }: { matrix: MatrixData; dimension: VolumeDimension; rows: string[]; labels: Record<string, string>; offset?: boolean; resetToken: number; onDraft: (device: Device, key: string, value: number | undefined) => void }) {
   return <div className="rule-table">{rows.map((row) => <div className="rule-row" key={row}><span>{labels[row] || matrix.catalog.scenario_labels[row] || titleCase(row)}</span>{DEVICES.map((device) => <PercentInput key={device} offset={offset} resetToken={resetToken} value={matrix[dimension]?.[device]?.[row] ?? 0} overridden={matrix.override?.[dimension]?.[device]?.[row] !== undefined} onDraft={(value) => onDraft(device, row, value)} />)}</div>)}</div>;
 }
 
@@ -110,7 +116,7 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
   }, [hass, reapply?.pending]);
   if (!matrix) return <Card><EmptyState icon={Icon.SlidersHorizontal} title="Regel-Contract nicht verfügbar" text="benni_media_policy/get_matrix konnte nicht geladen werden. Es wird nichts lokal gespeichert." /></Card>;
 
-  const stageCell = (dimension: Dimension, device: Device, key: string, value: number | null) => {
+  const stageCell = (dimension: Dimension, device: Device, key: string, value: MatrixCell) => {
     setSaveStatus("idle"); setSaveError("");
     setMatrixPatch((current) => {
       const next = structuredClone(current);
@@ -126,9 +132,19 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
       }
       return next;
     });
-    if (value !== null) setDraftMatrix((current) => { const next = structuredClone(current!); next[dimension][device][key] = value; return next; });
+    setDraftMatrix((current) => {
+      const next = structuredClone(current!);
+      if (dimension === "boost_allowed") {
+        if (typeof value === "boolean") next.boost_allowed![device][key] = value;
+      } else if (typeof value === "number") {
+        next[dimension]![device][key] = value;
+      } else if (dimension === "phase_max") {
+        delete next.phase_max![device][key];
+      }
+      return next;
+    });
   };
-  const stageCellDraft = (dimension: Dimension, device: Device, key: string, value: number | undefined) => {
+  const stageCellDraft = (dimension: Dimension, device: Device, key: string, value: MatrixCell | undefined) => {
     const field = `${dimension}.${device}.${key}`;
     setInvalidFields((current) => { const next = new Set(current); if (value === undefined) next.add(field); else next.delete(field); return next; });
     if (value !== undefined) stageCell(dimension, device, key, value);
@@ -152,11 +168,14 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
   };
   const resetCells = (label: string, dimension: Dimension, rows: string[]) => {
     if (!window.confirm(`${label} zurücksetzen? Es werden nur die gespeicherten Overrides dieses Abschnitts gelöscht; andere Regeln bleiben unverändert.`)) return;
-    DEVICES.forEach((device) => rows.forEach((row) => stageCell(dimension, device, row, null)));
+    DEVICES.forEach((device) => {
+      const keys = dimension === "base" ? Object.keys(backendMatrix?.override?.base?.[device] || {}) : rows;
+      keys.forEach((row) => stageCell(dimension, device, row, null));
+    });
   };
   const resetAllMatrix = () => {
-    if (!window.confirm("Matrixwerte auf Standard zurücksetzen? Betroffen sind ausschließlich Tagesphasen-Basis, Szenario-Offsets einschließlich Gaming Normal und Activity-Offsets. Fensterwerte, Grind-Offsets, Private-Time-Cap, Quiet/Ducking, Boost, Caps sowie Apply-Optionen und Delays bleiben unverändert. Der Reset wird erst mit „Änderungen speichern“ persistiert.")) return;
-    (["base", "scenario_off", "activity_off"] as Dimension[]).forEach((dimension) => DEVICES.forEach((device) => Object.keys(backendMatrix?.override?.[dimension]?.[device] || {}).forEach((key) => stageCell(dimension, device, key, null))));
+    if (!window.confirm("Matrixwerte auf Standard zurücksetzen? Betroffen sind Tagesphasen-Basis, Phasen-Maxima und Boost-Freigaben sowie Szenario-Offsets einschließlich Gaming Normal und Activity-Offsets. Fensterwerte, Grind-Offsets, Private-Time-Cap, Quiet/Ducking, Boost-Höhe, globale Maxima sowie Apply-Optionen und Delays bleiben unverändert. Der Reset wird erst mit „Änderungen speichern“ persistiert.")) return;
+    (["base", "scenario_off", "activity_off", "phase_max", "boost_allowed"] as Dimension[]).forEach((dimension) => DEVICES.forEach((device) => Object.keys(backendMatrix?.override?.[dimension]?.[device] || {}).forEach((key) => stageCell(dimension, device, key, null))));
   };
   const persist = async () => {
     if (!dirty || invalidFields.size || saveStatus === "saving") return;
@@ -179,6 +198,7 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
       setSaveError(`${partial ? `${partial}; ` : ""}${reason instanceof Error ? reason.message : String(reason)}`); setSaveStatus("error");
     }
   };
+  const hasPhaseSettings = matrix.phase_max != null && matrix.boost_allowed != null;
   const scalar = (key: string) => matrix.scalars[key];
   const privateSource = state.private_time_active ? (state.private_source === "automatic" ? "Automatischer Pfad aktiv" : state.private_source === "manual" ? "Manueller Pfad aktiv" : "Private Time aktiv") : "Kein Pfad aktiv";
   const saveBar = <div className={`rules-save-bar ${saveStatus}`} role="status" aria-live="polite">
@@ -208,7 +228,25 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
     {saveBar}
 
     {tab === "matrix" && <>
-      <Card className="rule-section"><SectionHeader index={1} title="Tagesphasen-Basis" sub="Grundlautstärke je Tagesphase und Gerät" unit="Prozent" help="Baselines sind absolute Lautstärken. Intern speichert die Policy 0,0–1,0; hier werden 0–100 % angezeigt." onReset={() => resetCells("Tagesphasen-Basis", "base", matrix.catalog.dayphases)} /><MatrixRows matrix={matrix} dimension="base" rows={matrix.catalog.dayphases} labels={DAY_LABELS} resetToken={resetToken} onDraft={(device, key, value) => stageCellDraft("base", device, key, value)} /></Card>
+      <Card className="rule-section">
+        <SectionHeader index={1} title="Basiswerte je Tagesphase" sub={hasPhaseSettings ? "Leere Maximalfelder übernehmen das globale Geräte-Maximum." : "Grundlautstärke je Tagesphase und Gerät"} unit="Prozent" help="Der niedrigere Wert aus Phasen-Maximum und globalem Maximum begrenzt das Ziel. Titel-Boost gilt nur für HomePods." onReset={() => resetCells("Tagesphasen-Basis", "base", matrix.catalog.dayphases)} showDevices={!hasPhaseSettings} />
+        {hasPhaseSettings ? <div className="phase-rules">
+          <table>
+            <thead><tr><th scope="col">Tagesphase</th><th scope="col">HomePods</th><th scope="col">Denon</th><th scope="col">Max HomePods</th><th scope="col">Max Denon</th><th scope="col">Titel-Boost</th></tr></thead>
+            <tbody>{matrix.catalog.dayphases.map((phase) => {
+              const label = DAY_LABELS[phase] || titleCase(phase);
+              return <tr key={phase}>
+                <th scope="row">{label}</th>
+                {DEVICES.map((device) => <td key={device}><PercentInput resetToken={resetToken} value={matrix.base[device]?.[phase]} overridden={matrix.override?.base?.[device]?.[phase] !== undefined} label={`${label} ${device === "homepods" ? "HomePods" : "Denon"}`} onDraft={(value) => stageCellDraft("base", device, phase, value)} /></td>)}
+                {DEVICES.map((device) => <td key={device}><PercentInput resetToken={resetToken} value={matrix.phase_max?.[device]?.[phase]} overridden={matrix.override?.phase_max?.[device]?.[phase] !== undefined} label={`${label} Max ${device === "homepods" ? "HomePods" : "Denon"}`} onDraft={(value) => stageCellDraft("phase_max", device, phase, value)} onClear={() => stageCellDraft("phase_max", device, phase, null)} /></td>)}
+                <td><label className="phase-boost">
+                  <input type="checkbox" aria-label={`${label} Titel-Boost`} checked={matrix.boost_allowed?.homepods?.[phase] === true} onChange={(event) => stageCell("boost_allowed", "homepods", phase, event.target.checked)} />
+                </label></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div> : <MatrixRows matrix={matrix} dimension="base" rows={matrix.catalog.dayphases} labels={DAY_LABELS} resetToken={resetToken} onDraft={(device, key, value) => stageCellDraft("base", device, key, value)} />}
+      </Card>
       <Card className="rule-section"><SectionHeader index={2} title="Fenster" sub="Geschlossen ohne Abzug; gekippt und offen verwenden denselben Wert" unit="Prozentpunkte" help="Der Öffnungs-Master unterscheidet geschlossen, gekippt und offen. Die Policy wendet für gekippt und offen bewusst denselben gerätespezifischen Offset an." resetSupported={false} />
         <div className="rule-table"><div className="rule-row"><span>Geschlossen <Pill tone="green">fest 0</Pill></span>{DEVICES.map((device) => <PercentInput key={device} value={0} offset disabled />)}</div><div className="rule-row"><span>Gekippt <Pill tone="orange">additiv</Pill></span><PercentInput resetToken={resetToken} value={scalar("opening_offset_homepods")} offset onDraft={(value) => stageScalarDraft("opening_offset_homepods", value)} /><PercentInput resetToken={resetToken} value={scalar("opening_offset_denon")} offset onDraft={(value) => stageScalarDraft("opening_offset_denon", value)} /></div><div className="rule-row"><span>Offen <Pill tone="violet">wie gekippt</Pill></span><PercentInput value={scalar("opening_offset_homepods")} offset disabled /><PercentInput value={scalar("opening_offset_denon")} offset disabled /></div></div>
       </Card>
@@ -224,7 +262,7 @@ export function RulesPage({ matrix: backendMatrix, apply = {}, state = {}, hass,
 
     {tab === "safety" && <div className="safety-grid">
       <Card className="private-card" title="Private Time" action={<ResetButton label="Private Time" supported={false} />}><div className="private-paths"><div><Pill tone="violet">Automatisch</Pill><b>Classifier + PC + Denon</b><span>Alle drei Bedingungen müssen gleichzeitig aktiv sein.</span></div><div><Pill tone="cyan">Manuell</Pill><b>Schalter + PC</b><span>Headset-Pfad ohne Denon und ohne Classifier; schaltet Denon nie ein.</span></div></div><div className="hard-rule-banner"><Icon.LockKeyhole size={18} /><div><b>HomePods bleiben aus</b><span>Beide Private-Time-Pfade übersteuern die normale Matrix. Private Time startet niemals eine Wake-Sequenz.</span></div></div><div className="private-values"><div><span>Denon-Cap</span><PercentInput resetToken={resetToken} value={scalar("private_denon_cap")} onDraft={(value) => stageScalarDraft("private_denon_cap", value)} /></div><div><span>Exit-Delay</span><ReadValue value={apply.private_exit?.delay_s} unit=" s" missing="Apply besitzt die Option private_exit_delay_seconds, veröffentlicht den aktuellen Wert aber nicht im Status." /></div><div><span>Aktiver Pfad</span><strong>{privateSource}</strong></div><div><span>Diagnose</span><strong>{privateDiagnostic(state.private_reason || state.private_blocked_reason)}</strong></div></div></Card>
-      <Card title="Quiet, Boost & Mute" action={<ResetButton label="Quiet, Boost & Mute" supported={false} />}><div className="scalar-list detailed"><div><span>Quiet / Ducking <small>gemeinsamer Contract für beide Geräte</small></span><PercentInput resetToken={resetToken} value={scalar("ducked_target")} onDraft={(value) => stageScalarDraft("ducked_target", value)} /></div><div><span>Track Boost <small>nur HomePods</small></span><PercentInput resetToken={resetToken} offset value={scalar("boost_offset")} onDraft={(value) => stageScalarDraft("boost_offset", value)} /></div></div><div className="rule-notes"><p><Pill tone="orange">Hard-Override</Pill> Quiet setzt aktive Ausgaben direkt auf das Ducking-Ziel und übergeht die Matrix.</p><p><Pill tone="violet">Boost-Block</Pill> Blockiert bei Arbeit zuhause, Arbeit außer Haus und Quiet Mode.</p><p><Pill tone="orange">Hard-Mute</Pill> HomePods-Classifier „Stumm“ setzt die HomePods unabhängig von der Matrix auf 0.</p><p className="contract-warning">Der Contract hat nur einen gemeinsamen Ducking-Wert. Getrennte HomePods-/Denon-Werte fehlen.</p></div></Card>
+      <Card title="Quiet, Boost & Mute" action={<ResetButton label="Quiet, Boost & Mute" supported={false} />}><div className="scalar-list detailed"><div><span>Quiet / Ducking <small>gemeinsamer Contract für beide Geräte</small></span><PercentInput resetToken={resetToken} value={scalar("ducked_target")} onDraft={(value) => stageScalarDraft("ducked_target", value)} /></div><div><span>Track Boost <small>nur HomePods</small></span><PercentInput resetToken={resetToken} offset value={scalar("boost_offset")} onDraft={(value) => stageScalarDraft("boost_offset", value)} /></div></div><div className="rule-notes"><p><Pill tone="orange">Hard-Override</Pill> Quiet setzt aktive Ausgaben direkt auf das Ducking-Ziel innerhalb der wirksamen Geräteobergrenze.</p><p><Pill tone="violet">Boost-Block</Pill> Blockiert bei Arbeit zuhause, Arbeit außer Haus, Quiet Mode und fehlender Phasenfreigabe.</p><p><Pill tone="orange">Hard-Mute</Pill> HomePods-Classifier „Stumm“ setzt die HomePods unabhängig von der Matrix auf 0.</p><p className="contract-warning">Der Contract hat nur einen gemeinsamen Ducking-Wert. Getrennte HomePods-/Denon-Werte fehlen.</p></div></Card>
       <Card title="Caps & Grenzen" action={<ResetButton label="Caps & Grenzen" supported={false} />}><div className="device-scalar-head"><b>HomePods</b><b>Denon</b></div><div className="paired-values"><span>Maximalpegel</span><PercentInput resetToken={resetToken} value={scalar("homepods_max")} onDraft={(value) => stageScalarDraft("homepods_max", value)} /><PercentInput resetToken={resetToken} value={scalar("denon_max")} onDraft={(value) => stageScalarDraft("denon_max", value)} /><span>Aktiv-Mindestpegel</span><PercentInput resetToken={resetToken} value={scalar("active_min")} onDraft={(value) => stageScalarDraft("active_min", value)} /><PercentInput value={scalar("active_min")} disabled /></div><p className="muted-copy">Der Mindestpegel ist ein gemeinsamer Policy-Wert. Caps greifen nach additiver Matrix und Nudge; Hard-Overrides bleiben dominant.</p></Card>
     </div>}
 

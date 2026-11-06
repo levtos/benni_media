@@ -24,6 +24,15 @@ footer{grid-column:1/-1;display:flex;justify-content:space-between;align-items:c
 @media (max-width:900px){.rule-title{grid-template-columns:35px 1fr}.rule-title-actions{grid-column:2;justify-content:flex-start;margin-top:8px}.rule-device-head{display:none}.fixed-rule-grid{grid-template-columns:1fr}.waking-formula{grid-template-columns:1fr}.waking-formula b{transform:rotate(90deg)}.private-paths{grid-template-columns:1fr}}
 @media (max-width:600px){.private-values{grid-template-columns:1fr}.paired-values{grid-template-columns:1fr 80px 80px}.rules-tabs .button.danger{width:100%}.reset-explainer{align-items:flex-start}}
 .rules-page .rule-row{min-height:39px;padding-top:4px;padding-bottom:4px}.rules-page .rule-title{padding-top:9px;padding-bottom:9px}.rules-page .percent-input input{padding-top:5px;padding-bottom:5px}
+
+.phase-rules { overflow-x: auto; }
+.phase-rules table { width: 100%; min-width: 640px; border-collapse: collapse; }
+.phase-rules th, .phase-rules td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--line); }
+.phase-rules th:first-child { padding-left: 16px; text-align: left; }
+.phase-rules .percent-input { margin-inline: auto; }
+.phase-boost { display: grid; place-items: center; width: 44px; min-height: 44px; margin-inline: auto; cursor: pointer; }
+.phase-rules input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--cyan); }
+.phase-rules input:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
 .rules-page{padding-bottom:82px}.rules-save-bar{position:sticky;z-index:25;top:8px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:14px 0;padding:12px 14px;border:1px solid #394255;border-radius:10px;background:#171d29ee;box-shadow:0 10px 28px #05070dbb;backdrop-filter:blur(12px)}.rules-save-bar>div{display:flex;flex-direction:column;gap:3px}.rules-save-bar b{font-size:13px}.rules-save-bar span{font-size:10px;color:var(--muted)}.rules-save-bar.idle b{color:var(--orange)}.rules-save-bar.saving b{color:var(--cyan)}.rules-save-bar.saved b{color:var(--green)}.rules-save-bar.error{border-color:#763b48}.rules-save-bar.error b,.rules-save-bar.error span{color:#ff7185}.rules-save-actions{display:flex!important;flex-direction:row!important;flex-wrap:wrap;justify-content:flex-end}.rules-save-bar .button{min-width:0;justify-content:center}
 .effect-badges{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.radio-row button img{width:28px;height:28px;border-radius:6px;object-fit:cover}.radio-row button.playing{border-color:var(--green);box-shadow:inset 0 0 0 1px #50fa7b33}.radio-row button small{display:block;color:var(--green);font-size:9px;text-transform:uppercase}
 .artwork.gaming img{object-fit:contain;object-position:center}
