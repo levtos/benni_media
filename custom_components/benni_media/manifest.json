@@ -1,7 +1,7 @@
 {
   "domain": "benni_media",
   "name": "APOLLO — Benni Media",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "documentation": "https://github.com/Levtos/benni_media",
   "issue_tracker": "https://github.com/Levtos/benni_media/issues",
   "codeowners": ["@Levtos"],

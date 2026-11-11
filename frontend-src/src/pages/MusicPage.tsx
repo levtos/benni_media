@@ -3,8 +3,9 @@ import { ActiveMediaCard, Card, DeviceStatusGrid, EmptyState, Icon, Pill, Segmen
 import { dispatchAction } from "../api";
 import type { ApplyData, HassLike, PolicyData, StateData } from "../types";
 import { pct } from "../format";
+import { RadioShortcuts } from "../RadioShortcuts";
 
-export function MusicPage({ state = {}, policy = {}, apply = {}, hass, onChanged }: { state?: StateData; policy?: PolicyData; apply?: ApplyData; hass: HassLike; onChanged: () => void }) {
+export function MusicPage({ state = {}, policy = {}, hass, onChanged }: { state?: StateData; policy?: PolicyData; apply?: ApplyData; hass: HassLike; onChanged: () => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<{ name: string; uri: string; image?: string; favorite?: boolean }>>([]);
   const [searching, setSearching] = useState(false);
@@ -16,7 +17,7 @@ export function MusicPage({ state = {}, policy = {}, apply = {}, hass, onChanged
     <div className="music-main">
       <div className="now-playing-wide">{now ? <ActiveMediaCard kind="music" eyebrow="Aktuelle Wiedergabe" title={now.title || "Unbekannter Titel"} subtitle={now.artist} detail={`HomePods · ${pct(now.volume ?? state.devices?.homepods?.volume)}`} artwork={now.artwork_url} device="HomePods" volume={policy.volume_target_homepods} controls={<SegmentedButton disabled icon={Icon.Pause} title="Play/Pause ist im aktuellen Umbrella-Contract nicht vorhanden">Pause</SegmentedButton>} /> : <Card><EmptyState icon={Icon.Music2} title="Gerade läuft keine Musik" text="Radio oder Music Assistant starten; die Wiedergabe erscheint automatisch." /></Card>}</div>
       <Card title="Radiosender" action={<Pill tone="pink">Music Assistant</Pill>}>
-        <div className="radio-cards">{(apply.radio?.defaults || []).map((station) => <button key={station.uri} onClick={() => void play(station.uri)}><span className="radio-art"><Icon.Radio /></span><b>{station.name}</b><small>Radio</small><Icon.Play size={17} /></button>)}</div>
+        <RadioShortcuts hass={hass} onChanged={onChanged} />
       </Card>
       <Card title="Radio suchen"><div className="search-box"><Icon.Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void search()} placeholder="Sender in Music Assistant suchen …" /><button onClick={() => void search()} disabled={searching}>{searching ? "Suche …" : "Suchen"}</button></div>
         {results.length > 0 && <div className="search-results">{results.map((result) => <div key={result.uri}>{result.image ? <img src={result.image} alt="" /> : <Icon.Radio />}<div><b>{result.name}</b><small>{result.favorite ? "Favorit" : "Radio"}</small></div><button onClick={() => void play(result.uri)}><Icon.Play size={17} />Abspielen</button></div>)}</div>}
