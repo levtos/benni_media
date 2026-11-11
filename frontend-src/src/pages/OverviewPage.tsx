@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { RadioShortcuts } from "../RadioShortcuts";
 import { ActiveMediaCard, Card, DeviceStatusGrid, EmptyState, Icon, Pill, ReasonPanel, SegmentedButton, VolumeBreakdown } from "../components";
 import type { ApplyData, HassLike, OverviewData, PolicyData, StateData } from "../types";
 import { dispatchAction } from "../api";
@@ -22,14 +22,6 @@ export function OverviewPage({ data, hass, onChanged }: { data?: OverviewData; h
   const boostBlocked = boostRequested && !policy.track_boost_applied;
   const boostBlockReason = state.quiet_mode ? "Quiet Mode blockiert den Boost" : ["work_home", "work_away"].includes(String(state.activity_context || state.context_cards?.activity)) ? "Arbeitsmodus blockiert den Boost" : "Boost ist durch die aktuelle Regel gesperrt";
   const run = async (module: "state" | "policy" | "apply", action: string, params: Record<string, unknown> = {}) => { await dispatchAction(hass, module, action, params); onChanged(); };
-  const [radio, setRadio] = useState(apply.radio?.defaults || []);
-  useEffect(() => {
-    let active = true;
-    void dispatchAction(hass, "apply", "radio_shortcuts").then((result) => {
-      if (active && Array.isArray(result?.results)) setRadio(result.results);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [hass]);
   return <>
     <div className="section-heading"><h2>Aktive Medien</h2><Pill tone="green">{[Boolean(music), isGaming, isTv].filter(Boolean).length || 0} aktiv</Pill></div>
     <div className="overview-hero">
@@ -45,7 +37,7 @@ export function OverviewPage({ data, hass, onChanged }: { data?: OverviewData; h
     <div className="dashboard-grid lower">
       <Card className="quick-control" title="Schnellsteuerung">
         <div className="button-row"><SegmentedButton icon={Icon.Volume2} onClick={() => void run("policy", "nudge_volume", { delta: -0.05 })}>− 5 %</SegmentedButton><SegmentedButton icon={Icon.RefreshCw} onClick={() => void run("policy", "reset_nudge")}>Nudge Reset</SegmentedButton><SegmentedButton icon={Icon.Volume2} onClick={() => void run("policy", "nudge_volume", { delta: 0.05 })}>+ 5 %</SegmentedButton><SegmentedButton active={data?.audio_owner === "private"} icon={Icon.Headphones} onClick={() => void run("state", "toggle_private")}>Private Time</SegmentedButton><SegmentedButton disabled={!policy.nudge?.boost_active} icon={Icon.WandSparkles} onClick={() => void run("policy", "reset_boost")}>Boost Reset</SegmentedButton></div>
-        <h3>Radio-Schnellwahl</h3><div className="radio-row">{radio.map((station) => <button className={station.playing ? "playing" : ""} key={station.uri} onClick={() => void run("apply", "play_radio", { media_id: station.uri })}>{station.image ? <img src={station.image} alt="" /> : <Icon.Radio size={17} />}<span>{station.name}{station.playing && <small>Live</small>}</span></button>)}{!radio.length && <EmptyState compact title="Keine Radio-Favoriten" text="Media Apply liefert keine Default-Sender." />}</div>
+        <h3>Radio-Schnellwahl</h3><RadioShortcuts hass={hass} onChanged={onChanged} />
       </Card>
       <Card title="Geräte-Status"><DeviceStatusGrid devices={devices} /></Card>
       <Card title="Letzte Aktionen"><div className="action-log">{(apply.log || []).slice(0, 6).map((entry, index) => <div key={`${entry.ts}-${index}`}><time>{time(entry.ts)}</time><Icon.Activity size={16} /><span>{titleCase(entry.action)}{entry.denon_target != null ? ` · Denon ${pct(entry.denon_target)}` : ""}{entry.homepods_target != null ? ` · HomePods ${pct(entry.homepods_target)}` : ""}</span><Pill tone={entry.executed ? "green" : "orange"}>{entry.executed ? "live" : "shadow"}</Pill></div>)}{!apply.log?.length && <EmptyState compact title="Noch keine Aktionen" text="Apply-Aktionen erscheinen nach dem nächsten relevanten Wechsel." />}</div></Card>
